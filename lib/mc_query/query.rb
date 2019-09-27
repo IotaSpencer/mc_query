@@ -71,7 +71,7 @@ module MCQuery
       end
     end
 
-    private
+
     def get_session_id
       [(rand(32) + 1) & 0x0F0F0F0F].pack("N")
     end

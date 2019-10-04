@@ -1,22 +1,22 @@
 require 'net/http'
-require 'timeout'
+
 module MCQuery
-  class Query
-    @@MAGIC = "\xFE\xFD"
-    @@REQUEST = "#{@@MAGIC}\x00"
+
+  class Connect
+    @@MAGIC     = "\xFE\xFD"
+    @@REQUEST   = "#{@@MAGIC}\x00"
     @@HANDSHAKE = "#{@@MAGIC}\x09"
 
     def initialize(opts = {})
       # Merge in the default options
       opts = {:ip => 'localhost', :port => '25565', :timeout => 8}.merge(opts)
 
-      @ip = opts[:ip]
-      @port = opts[:port]
+      @ip      = opts[:ip]
+      @port    = opts[:port]
       @timeout = opts[:timeout]
 
       # Connect to the server socket (based on the options)
-      @socket = UDPSocket.new
-      @socket.connect(@ip, @port)
+      @socket = TCPSocket.new(@ip, @port)
 
       # Generate a session id and store it off
       @session_id = get_session_id
@@ -42,35 +42,37 @@ module MCQuery
       # Store off the challenge key (we'll need this for querying)
       @challenge = get_challenge_key
 
-      Timeout.timeout @timeout do
+      timeout @timeout do
         query  = @socket.send(encode_data("#{@@REQUEST}#{@session_id}") + @challenge.to_s, 0)
-        buffer = receive_data
+        buffer = recieve_data
         parsed = buffer.split("\0", 6)
+        puts parsed
         {
-          :name => parsed[0],
-          :gametype => parsed[1],
-          :world_name => parsed[2],
-          :online_players => parsed[3],
-          :max_players => parsed[4],
-          :ip => parsed[5]
+            :name           => parsed[0],
+            :gametype       => parsed[1],
+            :world_name     => parsed[2],
+            :online_players => parsed[3],
+            :max_players    => parsed[4],
+            :ip             => parsed[5]
         }
       end
     end
 
     def get_challenge_key
-      Timeout.timeout @timeout do
+      timeout @timeout do
         # Send the magic bytes, the handshake bytes, and the session id
         send_data("#{@@HANDSHAKE}#{@session_id}")
 
         # Get the raw data (splice out the headers, and convert to an int32)
-        raw_key = receive_data.to_i
+        raw_key = recieve_data.to_i
 
         # Pack it as big endian and return it
-        [raw_key].pack("N") 
+        [raw_key].pack("N")
       end
     end
 
     private
+
     def get_session_id
       [(rand(32) + 1) & 0x0F0F0F0F].pack("N")
     end
@@ -83,8 +85,8 @@ module MCQuery
       data.force_encoding(Encoding::ASCII_8BIT)
     end
 
-    def receive_data
-      # Receive the data, splicing out the headers
+    def recieve_data
+      # Recieve the data, splicing out the headers
       @socket.recvfrom(1460)[0][5...-1]
     end
   end
